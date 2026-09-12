@@ -1,0 +1,2 @@
+# Normaliza para LF: o build roda em Linux (Docker e CI) e scripts com CRLF quebram dentro do container.
+* text=auto eol=lf

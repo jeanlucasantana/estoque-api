@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- TargetFramework, Nullable e avisos como erros vêm do Directory.Build.props. -->
+
+</Project>
