@@ -4,6 +4,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- TreatWarningsAsErrors cobre o compilador e o NuGet; esta cobre os avisos do próprio MSBuild (ex.: conflito de versões). -->
+    <MSBuildTreatWarningsAsErrors>true</MSBuildTreatWarningsAsErrors>
 
     <!-- Audita pacotes diretos e transitivos. Com TreatWarningsAsErrors, um pacote com vulnerabilidade conhecida quebra o build. -->
     <NuGetAudit>true</NuGetAudit>

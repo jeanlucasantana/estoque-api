@@ -1,12 +1,23 @@
 <Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- As versões abaixo valem também para dependências transitivas. -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
 
   <ItemGroup Label="API">
     <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+  </ItemGroup>
+
+  <!--
+    O Npgsql exige EF Core >= 10.0.4, e o Design (só na API) puxa 10.0.12. Sem fixar, os projetos de teste
+    resolviam 10.0.4 enquanto a API compilava contra 10.0.12 (aviso MSB3277). Fixa a versão mais recente em todos.
+  -->
+  <ItemGroup Label="Fixadas (transitivas)">
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
   </ItemGroup>
 
   <ItemGroup Label="Testes">
