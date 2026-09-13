@@ -220,3 +220,15 @@ Problemas encontrados em `legado_net6/`, com severidade, impacto em produção e
 
 ### B2. Rotas fora do contrato especificado
 **Onde:** `/api/Produtos/buscar` e `/api/Pedidos/{id}/cancelar`. **Impacto:** divergência em relação ao contrato do `REQUISITOS.md`. **Tratamento:** rotas conforme o contrato. As quebras em relação ao legado estão listadas no README.
+
+---
+
+## Itens tratados só em parte
+
+Todos os problemas acima foram tratados. Em três deles a solução entregue resolve o defeito do legado, mas deixa uma limitação conhecida, registrada aqui e em "O que eu faria com mais tempo" no README:
+
+| Item | O que foi feito | O que ficou de fora e por quê |
+| :--- | :--- | :--- |
+| **A1** (confirmação) | `async void` substituído por fila em memória + `BackgroundService`, sem dados pessoais no log | Confirmações ainda na fila se perdem se o processo reiniciar. A solução definitiva é um outbox transacional, que cabe numa entrega futura sem mudar o contrato da API |
+| **C2** (cache) | `BinaryFormatter` e cache inseguro removidos | Não há cache substituto. O HybridCache com invalidação no PUT e no DELETE fica como próximo passo, quando houver medição de carga que justifique |
+| **A3** (frete) | Cliente tipado, timeout de 2 s, falha vira 503 | Sem circuit breaker: com o serviço fora do ar, cada pedido ainda espera até 2 s antes do 503 |
