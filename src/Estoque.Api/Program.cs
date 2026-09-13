@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Estoque.Api.Common;
 using Estoque.Api.Data;
+using Estoque.Api.Features.Produtos;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -51,5 +52,8 @@ if (app.Environment.IsDevelopment())
 // live: só confirma que o processo responde. ready: confirma também que o banco está acessível.
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("banco") });
+
+var api = app.MapGroup("/api");
+api.MapProdutos();
 
 app.Run();

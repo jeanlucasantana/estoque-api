@@ -10,18 +10,29 @@ public sealed class TratadorDeExcecoesInesperadas(
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
+        // Parâmetro obrigatório ausente, JSON malformado etc. Em Development o ASP.NET Core lança esta exceção
+        // em vez de só responder 400; é erro do cliente e mantém o status que ela carrega.
+        if (exception is BadHttpRequestException requisicaoInvalida)
+        {
+            return await EscreverAsync(httpContext, requisicaoInvalida.StatusCode, "Requisição inválida.", detalhe: null);
+        }
+
         logger.LogError(exception, "Erro inesperado em {Metodo} {Rota}", httpContext.Request.Method, httpContext.Request.Path);
 
-        httpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;
-        return await problemDetails.TryWriteAsync(new ProblemDetailsContext
+        return await EscreverAsync(
+            httpContext,
+            StatusCodes.Status500InternalServerError,
+            "Erro inesperado.",
+            "Informe o traceId ao suporte para localizar a falha.");
+    }
+
+    private ValueTask<bool> EscreverAsync(HttpContext httpContext, int status, string titulo, string? detalhe)
+    {
+        httpContext.Response.StatusCode = status;
+        return problemDetails.TryWriteAsync(new ProblemDetailsContext
         {
             HttpContext = httpContext,
-            ProblemDetails =
-            {
-                Status = StatusCodes.Status500InternalServerError,
-                Title = "Erro inesperado.",
-                Detail = "Informe o traceId ao suporte para localizar a falha.",
-            },
+            ProblemDetails = { Status = status, Title = titulo, Detail = detalhe },
         });
     }
 }

@@ -36,6 +36,4 @@ public sealed class Produto
         CustoUnitario = custoUnitario;
         Quantidade = quantidade;
     }
-
-    public void Inativar() => Ativo = false;
 }
