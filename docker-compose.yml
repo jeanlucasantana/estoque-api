@@ -38,6 +38,8 @@ services:
       context: .
       target: final
     environment:
+      # Production por padrão. Com ASPNETCORE_ENVIRONMENT=Development, o documento OpenAPI fica em /openapi/v1.json.
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       ConnectionStrings__Estoque: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
       Api__Chave: ${API_KEY}
       Frete__UrlBase: http://frete:8080
