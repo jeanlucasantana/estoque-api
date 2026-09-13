@@ -1,8 +1,12 @@
+using System.Globalization;
 using Estoque.Api.Data;
+using Estoque.Api.Features.Pedidos;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
 using Testcontainers.PostgreSql;
 
 [assembly: AssemblyFixture(typeof(Estoque.IntegrationTests.ApiFactory))]
@@ -15,7 +19,17 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
     public const string ChaveApi = "chave-de-teste-com-no-minimo-32-caracteres";
 
+    // Quarta-feira, 09/09/2026, 12h em Brasília: relógio fixo, sem promoção de sexta (coberta nos testes unitários).
+    public static readonly DateTimeOffset Agora = new(2026, 9, 9, 15, 0, 0, TimeSpan.Zero);
+
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:17-alpine").Build();
+
+    public ApiFactory()
+    {
+        // Força a cultura pt-BR, que usa vírgula decimal. Se algum valor para o frete for formatado pela cultura
+        // do servidor, o frete falso responde 404, como o simulador real, e os testes quebram.
+        CultureInfo.DefaultThreadCurrentCulture = CultureInfo.GetCultureInfo("pt-BR");
+    }
 
     public async ValueTask InitializeAsync()
     {
@@ -37,6 +51,13 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     {
         builder.UseSetting("ConnectionStrings:Estoque", _postgres.GetConnectionString());
         builder.UseSetting("Api:Chave", ChaveApi);
+        builder.UseSetting("Frete:UrlBase", "http://frete.teste");
+
+        builder.ConfigureTestServices(services =>
+        {
+            services.AddSingleton<TimeProvider>(new FakeTimeProvider(Agora));
+            services.AddHttpClient<ServicoFrete>().ConfigurePrimaryHttpMessageHandler(() => new FreteFalso());
+        });
     }
 
     public override async ValueTask DisposeAsync()

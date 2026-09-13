@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Estoque.Api.Common;
 using Estoque.Api.Data;
+using Estoque.Api.Features.Pedidos;
 using Estoque.Api.Features.Produtos;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
@@ -20,12 +21,26 @@ builder.Services.AddOptions<BancoDeDadosOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+builder.Services.AddOptions<FreteOptions>()
+    .BindConfiguration(FreteOptions.Secao)
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
 // A connection string vem das Options quando o DbContext é criado, não na montagem do builder.
 builder.Services.AddDbContext<AppDbContext>((servicos, options) => options
     .UseNpgsql(servicos.GetRequiredService<IOptions<BancoDeDadosOptions>>().Value.ConnectionString)
     .UseSnakeCaseNamingConvention());
 
+builder.Services.AddHttpClient<ServicoFrete>((servicos, http) =>
+{
+    var opcoes = servicos.GetRequiredService<IOptions<FreteOptions>>().Value;
+    http.BaseAddress = new Uri(opcoes.UrlBase.TrimEnd('/') + "/");
+    http.Timeout = ServicoFrete.TempoMaximoDeEspera;
+});
+
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<FilaDeConfirmacoes>();
+builder.Services.AddHostedService<ServicoDeConfirmacao>();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<TratadorDeExcecoesInesperadas>();
@@ -55,5 +70,6 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check 
 
 var api = app.MapGroup("/api");
 api.MapProdutos();
+api.MapPedidos();
 
 app.Run();
