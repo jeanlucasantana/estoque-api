@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-testes-imagem:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Restaurar
+        run: dotnet restore Estoque.slnx
+
+      - name: Verificar formatação
+        run: dotnet format Estoque.slnx --verify-no-changes --no-restore
+
+      - name: Compilar em Release com avisos como erros
+        run: dotnet build Estoque.slnx -c Release --no-restore -warnaserror
+
+      # Os testes de integração sobem um PostgreSQL real via Testcontainers, usando o Docker do runner.
+      - name: Testes unitários e de integração
+        run: dotnet test --solution Estoque.slnx -c Release --no-build
+
+      - name: Construir imagem da API
+        run: docker build --target final -t estoque-api:${{ github.sha }} .
+
+      - name: Construir imagem de migração
+        run: docker build --target migrations -t estoque-migrations:${{ github.sha }} .
