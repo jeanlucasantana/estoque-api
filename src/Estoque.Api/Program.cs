@@ -26,9 +26,12 @@ builder.Services.AddOptions<FreteOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
-// A connection string vem das Options quando o DbContext é criado, não na montagem do builder.
+// A connection string é lida quando o DbContext é criado, e não na montagem do builder (assim os testes conseguem
+// sobrescrevê-la). Ela vem da configuração, e não das Options validadas, para que as ferramentas do EF Core
+// (migrations add e bundle) consigam montar o DbContext sem a configuração de produção. A obrigatoriedade continua
+// garantida pelo ValidateOnStart de BancoDeDadosOptions quando a API sobe.
 builder.Services.AddDbContext<AppDbContext>((servicos, options) => options
-    .UseNpgsql(servicos.GetRequiredService<IOptions<BancoDeDadosOptions>>().Value.ConnectionString)
+    .UseNpgsql(servicos.GetRequiredService<IConfiguration>().GetConnectionString("Estoque"))
     .UseSnakeCaseNamingConvention());
 
 builder.Services.AddHttpClient<ServicoFrete>((servicos, http) =>
