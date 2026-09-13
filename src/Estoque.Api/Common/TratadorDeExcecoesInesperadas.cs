@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Diagnostics;
+using Npgsql;
 
 namespace Estoque.Api.Common;
 
@@ -17,6 +18,18 @@ public sealed class TratadorDeExcecoesInesperadas(
             return await EscreverAsync(httpContext, requisicaoInvalida.StatusCode, "Requisição inválida.", detalhe: null);
         }
 
+        // Banco inacessível (conexão recusada, queda de rede, timeout): é indisponibilidade temporária, não defeito,
+        // e o cliente pode tentar de novo. O /health/ready também passa a responder 503 nessa situação.
+        if (EhFalhaTransitoriaDoBanco(exception))
+        {
+            logger.LogError(exception, "Banco de dados indisponível em {Metodo} {Rota}", httpContext.Request.Method, httpContext.Request.Path);
+            return await EscreverAsync(
+                httpContext,
+                StatusCodes.Status503ServiceUnavailable,
+                "Serviço temporariamente indisponível.",
+                "Tente novamente em instantes.");
+        }
+
         logger.LogError(exception, "Erro inesperado em {Metodo} {Rota}", httpContext.Request.Method, httpContext.Request.Path);
 
         return await EscreverAsync(
@@ -25,6 +38,10 @@ public sealed class TratadorDeExcecoesInesperadas(
             "Erro inesperado.",
             "Informe o traceId ao suporte para localizar a falha.");
     }
+
+    private static bool EhFalhaTransitoriaDoBanco(Exception exception) =>
+        exception is NpgsqlException { IsTransient: true }
+        || exception.InnerException is NpgsqlException { IsTransient: true };
 
     private ValueTask<bool> EscreverAsync(HttpContext httpContext, int status, string titulo, string? detalhe)
     {
