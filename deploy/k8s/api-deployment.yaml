@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: estoque-api
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: estoque-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Sobe um pod novo antes de derrubar um antigo: a capacidade nunca cai durante a atualização.
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: estoque-api
+    spec:
+      # preStop (5 s) + HostOptions.ShutdownTimeout padrão (30 s) + folga. Depois disso, o Kubernetes manda SIGKILL.
+      terminationGracePeriodSeconds: 40
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        runAsGroup: 1654
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          # Imagem do estágio "final" do Dockerfile, publicada pelo CI.
+          image: registry.example.com/estoque-api:1.0.0
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: estoque-api
+            - secretRef:
+                name: estoque-api
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          # startup: dá até 60 s para subir; enquanto não passa, liveness e readiness ficam desligados.
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 2
+            failureThreshold: 30
+          # liveness: só o processo. Se olhasse o banco, uma instabilidade dele reiniciaria todas as réplicas.
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          # readiness: com o banco inacessível, o pod sai do Service sem ser reiniciado.
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          lifecycle:
+            # Espera o Service tirar o pod dos endpoints antes do SIGTERM. A imagem chiseled não tem o binário
+            # "sleep", por isso a ação nativa sleep do Kubernetes (1.30 ou superior) em vez de exec.
+            preStop:
+              sleep:
+                seconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # O .NET usa /tmp (por exemplo, para o canal de diagnóstico); o resto do sistema de arquivos é só leitura.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      # Espalha as réplicas entre nós, para a queda de um nó não derrubar todas.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: estoque-api

@@ -1,0 +1,12 @@
+# Configuração que não é segredo. Segredos (connection string e chave de API) ficam no Secret "estoque-api".
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: estoque-api
+data:
+  ASPNETCORE_ENVIRONMENT: Production
+  Frete__UrlBase: https://frete.example.com
+  LimiteDeRequisicoes__PermissoesPorJanela: "300"
+  LimiteDeRequisicoes__JanelaSegundos: "10"
+  Confirmacoes__IntervaloSegundos: "2"
+  Confirmacoes__TamanhoDoLote: "20"

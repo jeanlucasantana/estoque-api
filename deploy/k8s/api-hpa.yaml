@@ -1,0 +1,20 @@
+# Escala de 3 a 10 réplicas pela CPU (requer o metrics-server no cluster).
+# Mais réplicas significam mais conexões com o PostgreSQL: o pool (100 por réplica, por padrão) precisa caber no banco.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: estoque-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: estoque-api
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

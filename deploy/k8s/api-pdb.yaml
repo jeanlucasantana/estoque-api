@@ -1,0 +1,10 @@
+# Durante manutenções do cluster (drenagem de nós), mantém pelo menos 2 réplicas no ar.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: estoque-api
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: estoque-api

@@ -1,0 +1,49 @@
+# Aplica as migrações pendentes e termina. Roda como etapa do deploy, antes da nova versão da API
+# (passo do pipeline ou hook do Argo CD), nunca na inicialização da API (ADR 0005).
+# Cada versão usa um nome de Job novo (ou apague o anterior), porque o spec de um Job não pode ser alterado.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: estoque-migrations
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: estoque-migrations
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrations
+          # Imagem do estágio "migrations" do Dockerfile, construída pelo CI com a mesma versão da API.
+          image: registry.example.com/estoque-migrations:1.0.0
+          args: ["--connection", "$(ConnectionStrings__Estoque)"]
+          env:
+            - name: ConnectionStrings__Estoque
+              valueFrom:
+                secretKeyRef:
+                  name: estoque-api
+                  key: ConnectionStrings__Estoque
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

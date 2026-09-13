@@ -1,0 +1,13 @@
+# Exposição interna. Um Ingress ou Gateway, com TLS, ficaria na frente; ele precisa repassar o X-Forwarded-For
+# para o rate limiting por IP enxergar o cliente real (ADR 0008).
+apiVersion: v1
+kind: Service
+metadata:
+  name: estoque-api
+spec:
+  selector:
+    app.kubernetes.io/name: estoque-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
