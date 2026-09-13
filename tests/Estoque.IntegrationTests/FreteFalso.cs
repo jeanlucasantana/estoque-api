@@ -12,6 +12,7 @@ public sealed partial class FreteFalso : HttpMessageHandler
     public const string CepLento = "99999000";
     public const string CepComErro = "99999999";
     public const string CepComRespostaInvalida = "99999998";
+    public const string CepComFreteAbsurdo = "99999997";
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
@@ -34,6 +35,8 @@ public sealed partial class FreteFalso : HttpMessageHandler
                 return Json(HttpStatusCode.InternalServerError, """{ "erro": "servico indisponivel" }""");
             case CepComRespostaInvalida:
                 return Json(HttpStatusCode.OK, """{ "erro": "sem valor" }""");
+            case CepComFreteAbsurdo:
+                return Json(HttpStatusCode.OK, """{ "valor": 1000000.01 }""");
             default:
                 return Json(HttpStatusCode.OK, """{ "valor": 25.90 }""");
         }

@@ -168,10 +168,27 @@ public sealed class PedidosTests(ApiFactory api)
         Assert.Equal(10, await EstoqueAsync(cliente, produto.Id));
     }
 
-    // Critério de aceite 6 e resposta fora do contrato.
+    // Com os limites de validação, o maior pedido possível cabe nas colunas do banco (numeric(18,2)).
+    [Fact]
+    public async Task Pedido_com_valores_no_limite_e_criado_sem_estouro()
+    {
+        using var cliente = api.CriarClienteAutenticado();
+        var produto = await CriarProdutoAsync(cliente, preco: 10_000_000m, quantidade: 1_000_000);
+
+        var resposta = await cliente.PostAsJsonAsync("/api/pedidos", Payload((produto.Id, 1_000_000)), Ct);
+        var pedido = await resposta.Content.ReadFromJsonAsync<PedidoResponse>(Json, Ct);
+
+        Assert.Equal(HttpStatusCode.Created, resposta.StatusCode);
+        Assert.NotNull(pedido);
+        Assert.Equal(10_000_000_000_000m, pedido.Subtotal);
+        Assert.Equal(0, await EstoqueAsync(cliente, produto.Id));
+    }
+
+    // Critério de aceite 6 e respostas fora do contrato.
     [Theory]
     [InlineData(FreteFalso.CepComErro)]
     [InlineData(FreteFalso.CepComRespostaInvalida)]
+    [InlineData(FreteFalso.CepComFreteAbsurdo)]
     public async Task Falha_ou_resposta_invalida_do_frete_retorna_503_sem_alterar_o_estoque(string cep)
     {
         using var cliente = api.CriarClienteAutenticado();

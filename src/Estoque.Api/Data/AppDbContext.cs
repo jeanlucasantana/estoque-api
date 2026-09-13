@@ -52,10 +52,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         pedido.Property(p => p.Status).HasConversion<string>().HasMaxLength(20);
         pedido.HasIndex(p => p.Status);
 
-        pedido.Property(p => p.Subtotal).HasPrecision(12, 2);
-        pedido.Property(p => p.Desconto).HasPrecision(12, 2);
-        pedido.Property(p => p.Frete).HasPrecision(12, 2);
-        pedido.Property(p => p.Total).HasPrecision(12, 2);
+        // Totais do pedido com mais dígitos que o preço unitário: somam até 100 itens de até 1.000.000 unidades.
+        pedido.Property(p => p.Subtotal).HasPrecision(18, 2);
+        pedido.Property(p => p.Desconto).HasPrecision(18, 2);
+        pedido.Property(p => p.Frete).HasPrecision(18, 2);
+        pedido.Property(p => p.Total).HasPrecision(18, 2);
 
         pedido.HasMany(p => p.Itens).WithOne().HasForeignKey(i => i.PedidoId).OnDelete(DeleteBehavior.Cascade);
 

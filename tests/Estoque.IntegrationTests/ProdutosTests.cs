@@ -57,6 +57,9 @@ public sealed class ProdutosTests(ApiFactory api)
     [InlineData("Parafuso", "ABC123", "1.005", "0.50", 1)]  // preço com três casas decimais
     [InlineData("Parafuso", "ABC123", "1.00", "-0.01", 1)]  // custo negativo
     [InlineData("Parafuso", "ABC123", "1.00", "0.50", -1)]  // estoque negativo
+    [InlineData("Parafuso", "ABC123", "10000000.01", "0.50", 1)]   // preço acima do máximo (estouraria a coluna)
+    [InlineData("Parafuso", "ABC123", "1.00", "10000000.01", 1)]   // custo acima do máximo
+    [InlineData("Parafuso", "ABC123", "1.00", "0.50", 1000000001)] // estoque acima do máximo
     public async Task Produto_invalido_retorna_400(string nome, string sku, string preco, string custo, int quantidade)
     {
         using var cliente = api.CriarClienteAutenticado();

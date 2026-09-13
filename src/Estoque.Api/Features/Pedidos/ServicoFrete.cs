@@ -20,6 +20,9 @@ public sealed class ServicoFrete(HttpClient http, ILogger<ServicoFrete> logger)
     // RN05. Sem retry: uma nova tentativa estouraria o limite de espera.
     public static readonly TimeSpan TempoMaximoDeEspera = TimeSpan.FromSeconds(2);
 
+    // Premissa: um frete acima deste valor é tratado como resposta inválida do serviço, não como cobrança real.
+    private const decimal FreteMaximo = 1_000_000m;
+
     // Retorna null quando o frete não pode ser obtido: falha, demora acima do limite ou resposta fora do contrato.
     // Quem chama responde 503; frete zero nunca é assumido.
     public async Task<decimal?> CalcularAsync(string cep, decimal valorPedido, CancellationToken cancellationToken)
@@ -38,7 +41,7 @@ public sealed class ServicoFrete(HttpClient http, ILogger<ServicoFrete> logger)
             }
 
             var corpo = await resposta.Content.ReadFromJsonAsync<RespostaFrete>(cancellationToken);
-            if (corpo?.Valor is not { } frete || frete < 0)
+            if (corpo?.Valor is not { } frete || frete < 0 || frete > FreteMaximo)
             {
                 logger.LogWarning("Serviço de frete respondeu sem um valor válido");
                 return null;

@@ -19,21 +19,23 @@ public sealed class SalvarProdutoRequest : IValidatableObject
 
     public required decimal CustoUnitario { get; init; }
 
-    [Range(0, int.MaxValue, ErrorMessage = "A quantidade em estoque deve ser maior ou igual a zero.")]
+    // Premissa: até 1 bilhão de unidades. Deixa folga para devoluções de estoque sem estourar o int.
+    [Range(0, 1_000_000_000, ErrorMessage = "A quantidade em estoque deve estar entre 0 e 1000000000.")]
     public required int Quantidade { get; init; }
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
-        if (Preco <= 0 || !Dinheiro.TemNoMaximoDuasCasas(Preco))
+        if (Preco <= 0 || Preco > Dinheiro.ValorUnitarioMaximo || !Dinheiro.TemNoMaximoDuasCasas(Preco))
         {
             yield return new ValidationResult(
-                "O preço deve ser maior que zero e ter no máximo duas casas decimais.", [nameof(Preco)]);
+                "O preço deve ser maior que zero, de no máximo 10000000.00 e ter no máximo duas casas decimais.", [nameof(Preco)]);
         }
 
-        if (CustoUnitario < 0 || !Dinheiro.TemNoMaximoDuasCasas(CustoUnitario))
+        if (CustoUnitario < 0 || CustoUnitario > Dinheiro.ValorUnitarioMaximo || !Dinheiro.TemNoMaximoDuasCasas(CustoUnitario))
         {
             yield return new ValidationResult(
-                "O custo unitário deve ser maior ou igual a zero e ter no máximo duas casas decimais.", [nameof(CustoUnitario)]);
+                "O custo unitário deve ser maior ou igual a zero, de no máximo 10000000.00 e ter no máximo duas casas decimais.",
+                [nameof(CustoUnitario)]);
         }
     }
 }
