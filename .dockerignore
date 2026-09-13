@@ -1,0 +1,13 @@
+# Só o necessário para o build entra no contexto: imagem menor, build mais rápido e nenhum segredo local copiado.
+**/bin/
+**/obj/
+**/.vs/
+**/.vscode/
+**/*.user
+.git/
+.github/
+.env
+tests/
+frete_fake/
+*.md
+docker-compose.yml

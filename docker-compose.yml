@@ -1,0 +1,54 @@
+name: estoque
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-dados:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # Aplica as migrações e termina. A API nunca migra o banco na inicialização:
+  # com várias réplicas, cada uma tentaria migrar ao mesmo tempo.
+  migrations:
+    build:
+      context: .
+      target: migrations
+    command: ["--connection", "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frete:
+    image: wiremock/wiremock:3.9.1
+    volumes:
+      - ./frete_fake:/home/wiremock
+    ports:
+      - "8081:8080"
+
+  api:
+    build:
+      context: .
+      target: final
+    environment:
+      ConnectionStrings__Estoque: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      Api__Chave: ${API_KEY}
+      Frete__UrlBase: http://frete:8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      frete:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  postgres-dados:

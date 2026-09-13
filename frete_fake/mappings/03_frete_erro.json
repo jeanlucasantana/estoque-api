@@ -1,0 +1,15 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/api/calcular",
+    "queryParameters": {
+      "cep": { "equalTo": "99999999" }
+    }
+  },
+  "response": {
+    "status": 500,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "erro": "servico indisponivel" }
+  }
+}
