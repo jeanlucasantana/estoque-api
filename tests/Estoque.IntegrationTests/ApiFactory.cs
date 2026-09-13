@@ -55,6 +55,8 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
         builder.ConfigureTestServices(services =>
         {
+            // Coleta os logs em memória, para os testes verificarem a confirmação (RN08) e a ausência de dados pessoais (RN07).
+            services.AddFakeLogging();
             services.AddSingleton<TimeProvider>(new FakeTimeProvider(Agora));
             services.AddHttpClient<ServicoFrete>().ConfigurePrimaryHttpMessageHandler(() => new FreteFalso());
         });
