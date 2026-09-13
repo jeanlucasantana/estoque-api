@@ -37,7 +37,7 @@ Problemas encontrados em `legado_net6/`, com severidade, impacto em produção e
 | A15 | Plataforma fora de suporte e pacote com vulnerabilidade conhecida | Alta |
 | A16 | Avisos do compilador suprimidos e nullable desabilitado | Alta |
 | M1 | Estoque insuficiente responde 400 sem identificar os produtos | Média |
-| M2 | Produto inexistente responde 200 com corpo nulo | Média |
+| M2 | Produto inexistente responde 204 em vez de 404 | Média |
 | M3 | N+1 e listagens sem paginação | Média |
 | M4 | Produto sem validação e SKU sem unicidade | Média |
 | M5 | CPF, email e CEP sem validação | Média |
@@ -69,7 +69,7 @@ Problemas encontrados em `legado_net6/`, com severidade, impacto em produção e
 ### C3. Venda acima do estoque sob concorrência
 **Onde:** `PedidosController.Criar`.
 **Problema:** lê a quantidade, compara em memória e grava depois, sem transação nem controle de concorrência.
-**Impacto:** duas requisições simultâneas leem o mesmo saldo e ambas vendem, deixando o estoque negativo. Com várias réplicas, nenhum lock em memória resolve.
+**Impacto:** requisições simultâneas leem o mesmo saldo, todas passam na conferência e cada uma grava o próprio "saldo menos um", sobrescrevendo as demais. Na reprodução, **30 pedidos simultâneos de 1 unidade para um produto com 10 foram todos aceitos, e o estoque terminou em 9**: vendeu 30 e baixou 1. Com várias réplicas, nenhum lock em memória resolve.
 **Tratamento:** reserva com `UPDATE` condicional atômico (`quantidade = quantidade - q WHERE id = @id AND ativo AND quantidade >= q`) para cada item, dentro de uma transação e na ordem de `ProdutoId` para evitar deadlock. Há `CHECK (quantidade >= 0)` no banco como última defesa, e a resposta é 409 listando os produtos sem saldo. Um teste de integração dispara 30 pedidos simultâneos contra 10 unidades.
 
 ### C4. Falha do serviço de frete vira frete zero
@@ -91,14 +91,14 @@ Problemas encontrados em `legado_net6/`, com severidade, impacto em produção e
 
 ### C7. Quantidade zero ou negativa aceita no pedido
 **Onde:** `CriarPedidoRequest` e `PedidosController.Criar`, sem nenhuma validação.
-**Impacto:** um item com quantidade `-10` **aumenta** o estoque (`Quantidade - (-10)`) e reduz o total do pedido. Lista de itens nula ou vazia gera 500.
+**Impacto:** um item com quantidade `-10` **aumenta** o estoque (`Quantidade - (-10)`) e deixa o total do pedido negativo. Na reprodução, o estoque da trena foi de 3 para 13 e o pedido foi gravado com total -245. CPF, email e CEP inválidos também foram aceitos com 200. Lista de itens nula ou vazia gera 500.
 **Tratamento:** validação de entrada responde 400 antes de qualquer acesso ao estoque. Itens repetidos do mesmo produto são consolidados.
 
 ## Alta
 
 ### A1. `async void` em endpoint e na confirmação
 **Onde:** `ProdutosController.Remover` e `PedidosController.EnviarEmailConfirmacao`.
-**Impacto:** em `Remover`, a resposta sai antes da exclusão terminar e o `DbContext` é descartado no fim da requisição, gerando `ObjectDisposedException`. Exceção em `async void` não tem quem a observe e derruba o processo. A confirmação pode se perder sem registro.
+**Impacto:** o MVC não espera um `async void`, então responde antes de a operação terminar. Em `Remover`, se o `DbContext` for descartado no fim da requisição antes da exclusão, ela falha com `ObjectDisposedException`. É uma condição de corrida: na reprodução, com SQLite local, a exclusão terminou a tempo, mas com um banco em rede e sob carga nada garante isso. Exceção em `async void` não tem quem a observe e derruba o processo. A confirmação pode se perder sem registro.
 **Tratamento:** endpoints `async Task`. A confirmação vai para uma fila em memória (`Channel`) consumida por um `BackgroundService`.
 
 ### A2. Bloqueio síncrono com `.Result`
@@ -118,7 +118,7 @@ Problemas encontrados em `legado_net6/`, com severidade, impacto em produção e
 
 ### A5. Valores monetários em `double`
 **Onde:** `Produto.Preco`, `Produto.CustoUnitario`, `Pedido.Total` e `ItemPedido.PrecoUnitario`.
-**Impacto:** `double` é ponto flutuante binário: somas acumulam erro e os totais saem com centavos errados. Também não há regra de arredondamento.
+**Impacto:** `double` é ponto flutuante binário: somas acumulam erro e os totais saem com centavos errados. Na reprodução, um pedido de 3 × 0,35 foi gravado com total `1.0499999999999998`. Também não há regra de arredondamento.
 **Tratamento:** `decimal` no código, `numeric(12,2)` no banco e arredondamento comercial (`MidpointRounding.AwayFromZero`).
 
 ### A6. Promoção de sexta-feira no fuso errado e aplicada sobre o frete
@@ -183,8 +183,8 @@ Problemas encontrados em `legado_net6/`, com severidade, impacto em produção e
 ### M1. Estoque insuficiente responde 400 sem identificar os produtos
 **Onde:** `PedidosController.Criar`. **Impacto:** o cliente não sabe qual item ajustar, e o código não distingue entrada inválida de conflito de estado. **Tratamento:** 409 com a lista dos produtos sem saldo.
 
-### M2. Produto inexistente responde 200 com corpo nulo
-**Onde:** `ProdutosController.Obter`. **Impacto:** clientes tratam ausência como sucesso. **Tratamento:** 404 em ProblemDetails.
+### M2. Produto inexistente responde 204 em vez de 404
+**Onde:** `ProdutosController.Obter`, com `return Ok(null)`. O formatador padrão do MVC transforma o corpo `null` em **204 No Content**, confirmado na reprodução. **Impacto:** o cliente recebe um status de sucesso para um recurso que não existe e não distingue "não encontrado" de "sem conteúdo". **Tratamento:** 404 em ProblemDetails.
 
 ### M3. N+1 e listagens sem paginação
 **Onde:** `PedidosController.Listar` faz uma consulta de itens por pedido; `ProdutosController.Listar` carrega a tabela inteira e filtra em memória. **Impacto:** tempo e memória crescem com o volume de dados até derrubar a API. **Tratamento:** paginação obrigatória (1 a 100 por página), filtro no banco e projeção só dos campos da resposta.

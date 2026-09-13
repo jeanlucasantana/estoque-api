@@ -129,7 +129,7 @@ dotnet test --project tests/Estoque.UnitTests       # só os unitários, sem Doc
 | Projeto | O que cobre |
 | :--- | :--- |
 | `Estoque.UnitTests` (43 testes) | Arredondamento comercial, cálculo do pedido, promoção de sexta com bordas de fuso, validação de CPF e todas as transições de estado |
-| `Estoque.IntegrationTests` (67 testes) | Endpoints de produtos e pedidos contra PostgreSQL real: autenticação, validação e limites de valores, SKU duplicado, busca com injeção de SQL, paginação, frete lento, com erro e com resposta inválida, **30 pedidos simultâneos para 10 unidades**, cancelamentos simultâneos, dados pessoais nas respostas, banco indisponível e geração do documento OpenAPI |
+| `Estoque.IntegrationTests` (70 testes) | Endpoints de produtos e pedidos contra PostgreSQL real: autenticação, validação e limites de valores, SKU duplicado, busca com injeção de SQL, paginação, frete lento, com erro e com resposta inválida, **30 pedidos simultâneos para 10 unidades**, cancelamentos simultâneos, `PUT` que perde a corrida para uma reserva, dados pessoais nas respostas **e nos logs**, confirmação em segundo plano, banco indisponível e geração do documento OpenAPI |
 
 **Determinismo:**
 - **Relógio:** os testes de integração usam um `FakeTimeProvider` fixo, e o domínio recebe o instante como parâmetro.
@@ -242,7 +242,7 @@ Pontos em que o `REQUISITOS.md` deixa margem de interpretação:
 | Listagens | Lista completa, sem paginação | `{ itens, pagina, tamanhoPagina, total }`; pedidos com filtro por `status` |
 | Criação de produto e de pedido | 200 com a entidade inteira | 201 com cabeçalho `Location` e o contrato do `REQUISITOS.md` |
 | Campos removidos das respostas | `custoUnitario`, `dataCadastro`, CPF e email do cliente | CPF só no detalhe e mascarado (`cpfFinal`) |
-| Produto inexistente | 200 com corpo `null` | 404 |
+| Produto inexistente | 204 sem corpo | 404 |
 | Exclusão de produto | Física, 200 sem corpo | Lógica, 204 (ou 404) |
 | Estoque insuficiente | 400 com texto | 409 com a lista de produtos sem saldo |
 | Formato de erro | Texto ou stack trace | ProblemDetails com `traceId` |
