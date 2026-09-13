@@ -3,6 +3,7 @@ using Estoque.Api.Common;
 using Estoque.Api.Data;
 using Estoque.Api.Domain;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Estoque.Api.Features.Pedidos;
@@ -61,12 +62,28 @@ public static class PedidosEndpoints
 
     private static async Task<Results<Created<PedidoResponse>, ValidationProblem, ProblemHttpResult>> Criar(
         CriarPedidoRequest request,
+        [FromHeader(Name = Idempotencia.Cabecalho)]
+        [MinLength(1, ErrorMessage = Idempotencia.MensagemTamanho)]
+        [MaxLength(Idempotencia.TamanhoMaximoDaChave, ErrorMessage = Idempotencia.MensagemTamanho)]
+        string? chaveDeIdempotencia,
         AppDbContext db,
         ServicoFrete servicoFrete,
         TimeProvider relogio,
+        HttpResponse resposta,
         ILogger<Pedido> logger,
         CancellationToken cancellationToken)
     {
+        // Idempotency-Key: se esta chave já criou um pedido, devolve o mesmo pedido em vez de criar outro.
+        if (chaveDeIdempotencia is not null)
+        {
+            var existente = await db.ChavesDeIdempotencia.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Chave == chaveDeIdempotencia, cancellationToken);
+            if (existente is not null)
+            {
+                return await RepetirAsync(existente, request, db, resposta, logger, cancellationToken);
+            }
+        }
+
         // RN02: itens repetidos do mesmo produto são consolidados em um só. A ordem por id é a ordem da reserva.
         var quantidades = request.Itens
             .GroupBy(i => i.ProdutoId)
@@ -134,12 +151,56 @@ public static class PedidosEndpoints
 
             // RN08 com outbox: a confirmação pendente entra na mesma transação do pedido. Ou os dois são gravados, ou nenhum.
             db.ConfirmacoesPendentes.Add(new ConfirmacaoPendente(pedido.Id, agora));
-            await db.SaveChangesAsync(cancellationToken);
+
+            // A chave só é registrada junto com um pedido criado: uma tentativa que falhou (409, 503) pode ser repetida.
+            if (chaveDeIdempotencia is not null)
+            {
+                db.ChavesDeIdempotencia.Add(new ChaveDeIdempotencia(chaveDeIdempotencia, Idempotencia.CalcularHash(request), pedido.Id, agora));
+            }
+
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException erro) when (chaveDeIdempotencia is not null && Idempotencia.EhChaveRepetida(erro))
+            {
+                // Uma requisição simultânea com a mesma chave gravou primeiro: esta inserção esperou o commit da outra e
+                // falhou pela chave primária. Desfaz o pedido e a reserva desta requisição e devolve o pedido da outra.
+                await transacao.RollbackAsync(cancellationToken);
+                db.ChangeTracker.Clear();
+                var vencedora = await db.ChavesDeIdempotencia.AsNoTracking()
+                    .FirstAsync(c => c.Chave == chaveDeIdempotencia, cancellationToken);
+                return await RepetirAsync(vencedora, request, db, resposta, logger, cancellationToken);
+            }
 
             await transacao.CommitAsync(cancellationToken);
         }
 
         logger.LogInformation("Pedido {PedidoId} criado com {QuantidadeItens} itens e total {Total}", pedido.Id, itens.Count, pedido.Total);
+        return TypedResults.Created($"/api/pedidos/{pedido.Id}", PedidoResponse.De(pedido));
+    }
+
+    // Repetição com a mesma chave: mesmo corpo devolve o pedido original; corpo diferente é recusado.
+    private static async Task<Results<Created<PedidoResponse>, ValidationProblem, ProblemHttpResult>> RepetirAsync(
+        ChaveDeIdempotencia chave,
+        CriarPedidoRequest request,
+        AppDbContext db,
+        HttpResponse resposta,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        if (chave.HashDaRequisicao != Idempotencia.CalcularHash(request))
+        {
+            return TypedResults.Problem(
+                statusCode: StatusCodes.Status422UnprocessableEntity,
+                title: "Idempotency-Key já usada com outra requisição.",
+                detail: "A chave informada já criou um pedido com dados diferentes. Use uma chave nova para um pedido novo.");
+        }
+
+        var pedido = await db.Pedidos.AsNoTracking().Include(p => p.Itens).FirstAsync(p => p.Id == chave.PedidoId, cancellationToken);
+        resposta.Headers[Idempotencia.CabecalhoDeRepeticao] = "true";
+
+        logger.LogInformation("Pedido {PedidoId} devolvido por repetição de Idempotency-Key", pedido.Id);
         return TypedResults.Created($"/api/pedidos/{pedido.Id}", PedidoResponse.De(pedido));
     }
 

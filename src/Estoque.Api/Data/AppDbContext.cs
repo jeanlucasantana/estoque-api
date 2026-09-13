@@ -17,12 +17,15 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 
     public DbSet<ConfirmacaoPendente> ConfirmacoesPendentes => Set<ConfirmacaoPendente>();
 
+    public DbSet<ChaveDeIdempotencia> ChavesDeIdempotencia => Set<ChaveDeIdempotencia>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigurarProduto(modelBuilder.Entity<Produto>());
         ConfigurarPedido(modelBuilder.Entity<Pedido>());
         ConfigurarItemPedido(modelBuilder.Entity<ItemPedido>());
         ConfigurarConfirmacaoPendente(modelBuilder.Entity<ConfirmacaoPendente>());
+        ConfigurarChaveDeIdempotencia(modelBuilder.Entity<ChaveDeIdempotencia>());
     }
 
     private static void ConfigurarProduto(EntityTypeBuilder<Produto> produto)
@@ -87,5 +90,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 
         // Índice parcial: o processador só procura as não enviadas, e as enviadas acumulam com o tempo.
         confirmacao.HasIndex(c => c.ProximaTentativaEm).HasFilter("enviada_em IS NULL");
+    }
+
+    private static void ConfigurarChaveDeIdempotencia(EntityTypeBuilder<ChaveDeIdempotencia> chave)
+    {
+        chave.ToTable("chaves_idempotencia");
+        chave.HasKey(c => c.Chave);
+        chave.Property(c => c.Chave).HasMaxLength(Idempotencia.TamanhoMaximoDaChave);
+        chave.Property(c => c.HashDaRequisicao).HasMaxLength(64);
+        chave.HasOne<Pedido>().WithMany().HasForeignKey(c => c.PedidoId).OnDelete(DeleteBehavior.Cascade);
     }
 }
