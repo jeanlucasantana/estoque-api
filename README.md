@@ -129,7 +129,7 @@ dotnet test --project tests/Estoque.UnitTests       # só os unitários, sem Doc
 | Projeto | O que cobre |
 | :--- | :--- |
 | `Estoque.UnitTests` (43 testes) | Arredondamento comercial, cálculo do pedido, promoção de sexta com bordas de fuso, validação de CPF e todas as transições de estado |
-| `Estoque.IntegrationTests` (61 testes) | Endpoints de produtos e pedidos contra PostgreSQL real: autenticação, validação, SKU duplicado, busca com injeção de SQL, paginação, frete lento, com erro e com resposta inválida, **30 pedidos simultâneos para 10 unidades**, cancelamentos simultâneos, dados pessoais nas respostas e geração do documento OpenAPI |
+| `Estoque.IntegrationTests` (67 testes) | Endpoints de produtos e pedidos contra PostgreSQL real: autenticação, validação e limites de valores, SKU duplicado, busca com injeção de SQL, paginação, frete lento, com erro e com resposta inválida, **30 pedidos simultâneos para 10 unidades**, cancelamentos simultâneos, dados pessoais nas respostas, banco indisponível e geração do documento OpenAPI |
 
 **Determinismo:**
 - **Relógio:** os testes de integração usam um `FakeTimeProvider` fixo, e o domínio recebe o instante como parâmetro.
@@ -197,6 +197,7 @@ frete_fake/                    Mapeamentos do simulador de frete
 | **Frete consultado antes da transação**, com timeout de 2 s e sem retry | Nenhuma trava fica presa durante uma chamada externa. Um retry estouraria o limite de 2 s da RN05 | O preço gravado é o lido antes da consulta de frete. O estoque continua garantido pelo `UPDATE` condicional |
 | **`HttpClient` tipado via `IHttpClientFactory`** | Reaproveita conexões (o legado criava um `HttpClient` por chamada) e renova handlers periodicamente | Sem circuit breaker (ver "O que eu faria com mais tempo") |
 | **Validação nativa do .NET 10 (`AddValidation`)** com Data Annotations e `IValidatableObject` | Sem dependência externa de validação | As regras do `IValidatableObject` só rodam depois que os atributos passam: com erros dos dois tipos, o cliente os recebe em duas rodadas |
+| **Paginação com parâmetros comuns e `[Range]`**, e não com `[AsParameters]` | Com `[AsParameters]` e atributos de validação, a geração do documento OpenAPI do .NET 10 falha com `InvalidCastException`. Um teste de integração garante que o documento é gerado | Os dois parâmetros se repetem nas três rotas paginadas |
 | **Chave de API em middleware**, e não em filtro de endpoint | Responde 401 antes de binding e validação, inclusive em rotas inexistentes sob `/api`. A comparação usa `CryptographicOperations.FixedTimeEquals` sobre hashes SHA-256, resistente a ataque de tempo | Uma chave única para todos os clientes, como no legado. Autenticação por cliente fica fora do escopo |
 | **Migrações em um serviço separado**, com o bundle do EF Core | A API nunca altera o esquema; a migração é uma etapa explícita do deploy | Um serviço a mais no Compose |
 | **Imagem `aspnet:10.0-noble-chiseled-extra`**, usuário não root, porta 8080 | Sem shell, sem gerenciador de pacotes e com superfície de ataque menor (imagem final de cerca de 250 MB). A variante `extra` inclui tzdata e ICU, sem os quais o fuso `America/Sao_Paulo` não existe | Sem shell dentro do container para depurar; o diagnóstico é por logs e health checks |
@@ -212,11 +213,17 @@ Pontos em que o `REQUISITOS.md` deixa margem de interpretação:
 
 - **Promoção de sexta-feira:** vale o relógio do servidor no momento da criação, convertido para `America/Sao_Paulo`. Um lojista em outro fuso (por exemplo, em Manaus) segue o calendário de Brasília. O relógio do cliente nunca é usado, porque o cliente o controla.
 - **Itens repetidos do mesmo produto:** são consolidados em um só item, somando as quantidades (RN02 permite consolidar ou rejeitar).
-- **Limites:** até 100 itens por pedido, de 1 a 1.000.000 unidades por item e página de no máximo 1.000.000. Evitam requisições gigantes e estouro de inteiro.
+- **Limites de entrada**, para que nenhum valor estoure as colunas do banco nem o `int`. Violá-los resulta em 400:
+  - até 100 itens por pedido, cada um com 1 a 1.000.000 unidades;
+  - preço e custo de até 10.000.000,00;
+  - estoque de até 1.000.000.000 unidades;
+  - página de no máximo 1.000.000.
+
+  Com esses limites, o maior subtotal possível fica abaixo de 10^15, e os totais do pedido usam `numeric(18,2)`.
 - **CPF e CEP:** só dígitos, sem pontuação (11 e 8 dígitos).
 - **SKU:** único entre todos os produtos, inclusive os inativos.
 - **Preço e custo com mais de duas casas decimais:** são rejeitados com 400, não arredondados.
-- **Frete:** um valor zero devolvido explicitamente pelo serviço é aceito. Resposta sem valor, com valor negativo ou fora do contrato resulta em 503.
+- **Frete:** um valor zero devolvido explicitamente pelo serviço é aceito. Resposta sem valor, com valor negativo, acima de 1.000.000,00 ou fora do contrato resulta em 503.
 - **Produto inativo:** sai da listagem e da busca, mas `GET /api/produtos/{id}` continua respondendo (com `ativo: false`) para consulta do histórico. `PUT` em produto inativo é permitido. `DELETE` de um produto já inativo responde 204.
 - **Busca de produtos:** paginada como a listagem, só com produtos ativos e sem diferenciar maiúsculas. `%` e `_` são tratados como texto literal.
 - **Listagem de pedidos:** resumo com id, status, data, nome do cliente, quantidade de itens e total, do mais recente para o mais antigo. Não traz CPF, email nem itens; os itens estão no detalhe.
@@ -264,9 +271,10 @@ Depois do commit do pedido, o id é colocado numa fila em memória (`Channel`), 
 
 - **Logs estruturados**, sem interpolação de strings. Fora de Development saem em JSON, com `TraceId` e `SpanId` em cada linha. CPF, email, nome do cliente, custo e chaves nunca são registrados.
 - **Erros** seguem ProblemDetails e sempre trazem `traceId`, o mesmo que aparece nos logs: um erro reportado pelo cliente pode ser localizado. Erros inesperados respondem 500 sem detalhes internos.
+- **Banco inacessível:** as rotas da API respondem **503** (indisponibilidade temporária) em vez de 500, e o `/health/ready` também responde 503.
 - **Health checks:** `/health/live` confirma só que o processo responde (para liveness); `/health/ready` confirma também o acesso ao banco (para readiness). Nenhum dos dois exige chave.
 - **CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)), a cada push e pull request: restore, verificação de formatação, build em Release com avisos como erros, todos os testes (com PostgreSQL via Testcontainers) e build das imagens da API e da migração.
-- **Qualidade de build:** nullable habilitado, avisos do compilador e do MSBuild tratados como erros e auditoria do NuGet, que quebra o build diante de pacote com vulnerabilidade conhecida. Nenhum aviso foi suprimido.
+- **Qualidade de build:** nullable habilitado, avisos do compilador e do MSBuild tratados como erros e auditoria do NuGet, que quebra o build diante de pacote com vulnerabilidade conhecida. Nenhum aviso foi suprimido no código escrito à mão; os únicos `#pragma` são os que o próprio EF Core gera nos arquivos de migração.
 
 ---
 
