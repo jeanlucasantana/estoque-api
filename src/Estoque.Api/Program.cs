@@ -51,6 +51,9 @@ builder.Services.AddHostedService<ProcessadorDeConfirmacoes>();
 
 builder.Services.AddLimiteDeRequisicoes();
 
+// Cache do detalhe de produto. As opções de expiração e a invalidação ficam em CacheDeProdutos.
+builder.Services.AddHybridCache();
+
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<TratadorDeExcecoesInesperadas>();
 builder.Services.AddValidation();

@@ -2,9 +2,11 @@ using System.ComponentModel.DataAnnotations;
 using Estoque.Api.Common;
 using Estoque.Api.Data;
 using Estoque.Api.Domain;
+using Estoque.Api.Features.Produtos;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
 
 namespace Estoque.Api.Features.Pedidos;
 
@@ -69,6 +71,7 @@ public static class PedidosEndpoints
         AppDbContext db,
         ServicoFrete servicoFrete,
         TimeProvider relogio,
+        HybridCache cache,
         HttpResponse resposta,
         ILogger<Pedido> logger,
         CancellationToken cancellationToken)
@@ -175,6 +178,9 @@ public static class PedidosEndpoints
 
             await transacao.CommitAsync(cancellationToken);
         }
+
+        // Depois do commit: a quantidade em estoque mostrada no detalhe dos produtos mudou.
+        await CacheDeProdutos.InvalidarAsync(cache, ids, cancellationToken);
 
         logger.LogInformation("Pedido {PedidoId} criado com {QuantidadeItens} itens e total {Total}", pedido.Id, itens.Count, pedido.Total);
         return TypedResults.Created($"/api/pedidos/{pedido.Id}", PedidoResponse.De(pedido));
@@ -284,6 +290,7 @@ public static class PedidosEndpoints
         int id,
         AppDbContext db,
         TimeProvider relogio,
+        HybridCache cache,
         ILogger<Pedido> logger,
         CancellationToken cancellationToken)
     {
@@ -320,6 +327,9 @@ public static class PedidosEndpoints
         }
 
         await transacao.CommitAsync(cancellationToken);
+
+        // Depois do commit: o estoque devolvido precisa aparecer no detalhe dos produtos.
+        await CacheDeProdutos.InvalidarAsync(cache, pedido.Itens.Select(i => i.ProdutoId), cancellationToken);
 
         logger.LogInformation("Pedido {PedidoId} cancelado com devolução de estoque de {QuantidadeItens} itens", pedido.Id, pedido.Itens.Count);
         return TypedResults.Ok(PedidoResponse.De(pedido));

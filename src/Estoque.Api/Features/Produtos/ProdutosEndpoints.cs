@@ -4,6 +4,7 @@ using Estoque.Api.Data;
 using Estoque.Api.Domain;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Hybrid;
 using Npgsql;
 
 namespace Estoque.Api.Features.Produtos;
@@ -53,16 +54,22 @@ public static class ProdutosEndpoints
         return TypedResults.Ok(await PaginarAsync(consulta, paginacao, cancellationToken));
     }
 
-    // O detalhe mostra também produtos inativos, para consulta do histórico.
+    // O detalhe mostra também produtos inativos, para consulta do histórico. A leitura passa pelo cache
+    // (CacheDeProdutos); um id inexistente também fica em cache, e a criação do produto remove essa entrada.
     private static async Task<Results<Ok<ProdutoResponse>, ProblemHttpResult>> Obter(
         int id,
         AppDbContext db,
+        HybridCache cache,
         CancellationToken cancellationToken)
     {
-        var produto = await db.Produtos
-            .Where(p => p.Id == id)
-            .Select(p => new ProdutoResponse(p.Id, p.Nome, p.Sku, p.Preco, p.Quantidade, p.Ativo))
-            .FirstOrDefaultAsync(cancellationToken);
+        var produto = await cache.GetOrCreateAsync<ProdutoResponse?>(
+            CacheDeProdutos.Chave(id),
+            async token => await db.Produtos
+                .Where(p => p.Id == id)
+                .Select(p => new ProdutoResponse(p.Id, p.Nome, p.Sku, p.Preco, p.Quantidade, p.Ativo))
+                .FirstOrDefaultAsync(token),
+            CacheDeProdutos.Opcoes,
+            cancellationToken: cancellationToken);
 
         return produto is null ? NaoEncontrado() : TypedResults.Ok(produto);
     }
@@ -70,6 +77,7 @@ public static class ProdutosEndpoints
     private static async Task<Results<Created<ProdutoResponse>, ProblemHttpResult>> Criar(
         SalvarProdutoRequest request,
         AppDbContext db,
+        HybridCache cache,
         ILogger<Produto> logger,
         CancellationToken cancellationToken)
     {
@@ -85,6 +93,8 @@ public static class ProdutosEndpoints
             return SkuDuplicado();
         }
 
+        await CacheDeProdutos.InvalidarAsync(cache, [produto.Id], cancellationToken);
+
         logger.LogInformation("Produto {ProdutoId} criado com SKU {Sku}", produto.Id, produto.Sku);
         return TypedResults.Created($"/api/produtos/{produto.Id}", ProdutoResponse.De(produto));
     }
@@ -93,6 +103,7 @@ public static class ProdutosEndpoints
         int id,
         SalvarProdutoRequest request,
         AppDbContext db,
+        HybridCache cache,
         ILogger<Produto> logger,
         CancellationToken cancellationToken)
     {
@@ -120,6 +131,8 @@ public static class ProdutosEndpoints
             return SkuDuplicado();
         }
 
+        await CacheDeProdutos.InvalidarAsync(cache, [produto.Id], cancellationToken);
+
         logger.LogInformation("Produto {ProdutoId} atualizado", produto.Id);
         return TypedResults.Ok(ProdutoResponse.De(produto));
     }
@@ -128,6 +141,7 @@ public static class ProdutosEndpoints
     private static async Task<Results<NoContent, ProblemHttpResult>> Remover(
         int id,
         AppDbContext db,
+        HybridCache cache,
         ILogger<Produto> logger,
         CancellationToken cancellationToken)
     {
@@ -139,6 +153,8 @@ public static class ProdutosEndpoints
         {
             return NaoEncontrado();
         }
+
+        await CacheDeProdutos.InvalidarAsync(cache, [id], cancellationToken);
 
         logger.LogInformation("Produto {ProdutoId} inativado", id);
         return TypedResults.NoContent();
