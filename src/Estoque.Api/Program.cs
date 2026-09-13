@@ -49,6 +49,8 @@ builder.Services.AddOptions<ConfirmacoesOptions>()
     .ValidateOnStart();
 builder.Services.AddHostedService<ProcessadorDeConfirmacoes>();
 
+builder.Services.AddLimiteDeRequisicoes();
+
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<TratadorDeExcecoesInesperadas>();
 builder.Services.AddValidation();
@@ -64,6 +66,9 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+
+// Antes da chave de API: um volume abusivo é barrado mesmo sem uma chave válida.
+app.UseRateLimiter();
 app.UseMiddleware<ChaveApiMiddleware>();
 
 if (app.Environment.IsDevelopment())

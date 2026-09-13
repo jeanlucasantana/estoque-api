@@ -27,8 +27,10 @@ public sealed class ProdutosConcorrenciaTests(ApiFactory api)
         Assert.NotNull(produto);
 
         // O interceptor cria a corrida de forma determinística: roda a "reserva" exatamente entre a leitura e a gravação do PUT.
-        using var comReservaSimultanea = api.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
-            services.ConfigureDbContext<AppDbContext>(options => options.AddInterceptors(new ReservaAntesDeGravar(produto.Id)))));
+        using var comReservaSimultanea = api.WithWebHostBuilder(builder => builder
+            .UseSetting("Confirmacoes:Habilitado", "false")
+            .ConfigureTestServices(services =>
+                services.ConfigureDbContext<AppDbContext>(options => options.AddInterceptors(new ReservaAntesDeGravar(produto.Id)))));
         using var clienteDoPut = comReservaSimultanea.CreateClient();
         clienteDoPut.DefaultRequestHeaders.Add("X-Api-Key", ApiFactory.ChaveApi);
 

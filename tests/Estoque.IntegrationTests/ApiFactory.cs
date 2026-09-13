@@ -54,6 +54,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("Frete:UrlBase", "http://frete.teste");
         builder.UseSetting("Confirmacoes:IntervaloSegundos", "1");
 
+        // Os testes disparam centenas de requisições do mesmo "IP"; o limite real é testado em LimiteDeRequisicoesTests.
+        builder.UseSetting("LimiteDeRequisicoes:PermissoesPorJanela", "1000000");
+
         builder.ConfigureTestServices(services =>
         {
             // Coleta os logs em memória, para os testes verificarem a confirmação (RN08) e a ausência de dados pessoais (RN07).

@@ -14,6 +14,12 @@ using Microsoft.Extensions.Logging.Testing;
 
 namespace Estoque.IntegrationTests;
 
+// As instâncias extras destes testes também processam as confirmações do banco compartilhado. Sem paralelismo, elas
+// não "roubam" confirmações que outros testes esperam encontrar nos logs da instância principal.
+[CollectionDefinition(DisableParallelization = true)]
+public sealed class ProcessamentoDeConfirmacoesSemParalelismo;
+
+[Collection(typeof(ProcessamentoDeConfirmacoesSemParalelismo))]
 public sealed class OutboxTests(ApiFactory api)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerOptions.Web) { Converters = { new JsonStringEnumConverter() } };
