@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Estoque.Api.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260912151314_Inicial")]
+    [Migration("20260913020954_Inicial")]
     partial class Inicial
     {
         /// <inheritdoc />
@@ -50,6 +50,12 @@ namespace Estoque.Api.Data.Migrations
                     b.Property<int>("Quantidade")
                         .HasColumnType("integer")
                         .HasColumnName("quantidade");
+
+                    b.Property<string>("Sku")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("sku");
 
                     b.HasKey("Id")
                         .HasName("pk_itens_pedido");
@@ -227,14 +233,12 @@ namespace Estoque.Api.Data.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_itens_pedido_pedidos_pedido_id");
 
-                    b.HasOne("Estoque.Api.Domain.Produto", "Produto")
+                    b.HasOne("Estoque.Api.Domain.Produto", null)
                         .WithMany()
                         .HasForeignKey("ProdutoId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_itens_pedido_produtos_produto_id");
-
-                    b.Navigation("Produto");
                 });
 
             modelBuilder.Entity("Estoque.Api.Domain.Pedido", b =>

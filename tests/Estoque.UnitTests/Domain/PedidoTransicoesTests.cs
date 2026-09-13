@@ -87,7 +87,7 @@ public class PedidoTransicoesTests
             clienteCpf: "52998224725",
             clienteEmail: "maria@example.com",
             cep: "01001000",
-            itens: [new ItemPedido(produtoId: 1, quantidade: 2, precoUnitario: 10m)],
+            itens: [new ItemPedido(produtoId: 1, sku: "PAR010", quantidade: 2, precoUnitario: 10m)],
             valores: new ValoresPedido(Subtotal: 20m, Desconto: 0m, Frete: 5m, Total: 25m),
             criadoEm: Agora);
 

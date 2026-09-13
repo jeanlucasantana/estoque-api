@@ -68,6 +68,7 @@ public partial class Inicial : Migration
                     .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                 pedido_id = table.Column<int>(type: "integer", nullable: false),
                 produto_id = table.Column<int>(type: "integer", nullable: false),
+                sku = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false),
                 quantidade = table.Column<int>(type: "integer", nullable: false),
                 preco_unitario = table.Column<decimal>(type: "numeric(12,2)", precision: 12, scale: 2, nullable: false)
             },

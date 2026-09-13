@@ -68,9 +68,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         item.ToTable("itens_pedido", tabela =>
             tabela.HasCheckConstraint("ck_itens_pedido_quantidade_positiva", "quantidade > 0"));
 
+        item.Property(i => i.Sku).HasMaxLength(30);
         item.Property(i => i.PrecoUnitario).HasPrecision(12, 2);
 
         // Produto nunca é apagado fisicamente (RN01); o Restrict protege o histórico dos pedidos.
-        item.HasOne(i => i.Produto).WithMany().HasForeignKey(i => i.ProdutoId).OnDelete(DeleteBehavior.Restrict);
+        item.HasOne<Produto>().WithMany().HasForeignKey(i => i.ProdutoId).OnDelete(DeleteBehavior.Restrict);
     }
 }

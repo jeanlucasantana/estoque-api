@@ -108,7 +108,9 @@ public sealed class Pedido
     }
 }
 
-public sealed class ItemPedido(int produtoId, int quantidade, decimal precoUnitario)
+// SKU e preço vigentes no momento da venda ficam gravados no item (RN04):
+// o histórico do pedido não muda se o produto for alterado depois.
+public sealed class ItemPedido(int produtoId, string sku, int quantidade, decimal precoUnitario)
 {
     public int Id { get; private set; }
 
@@ -116,10 +118,9 @@ public sealed class ItemPedido(int produtoId, int quantidade, decimal precoUnita
 
     public int ProdutoId { get; private set; } = produtoId;
 
+    public string Sku { get; private set; } = sku;
+
     public int Quantidade { get; private set; } = quantidade;
 
-    // Preço vigente no momento da criação do pedido (RN04), gravado no item.
     public decimal PrecoUnitario { get; private set; } = precoUnitario;
-
-    public Produto? Produto { get; private set; }
 }
