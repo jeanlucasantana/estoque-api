@@ -64,7 +64,7 @@ Problemas encontrados em `legado_net6/`, com severidade, impacto em produção e
 **Onde:** `CacheHelper`; `SYSLIB0011` suprimido e `EnableUnsafeBinaryFormatterSerialization` ligado no `.csproj`.
 **Problema:** desserialização com `BinaryFormatter` em um `Dictionary` estático.
 **Impacto:** `BinaryFormatter` é um vetor conhecido de execução remota de código e foi removido no .NET 9, onde lança `PlatformNotSupportedException`, então o código nem roda no .NET 10. Além disso, o `Dictionary` não é thread-safe e pode corromper sob concorrência, não expira, nunca é invalidado (PUT e DELETE continuam servindo o produto antigo) e é local a cada réplica.
-**Tratamento:** cache removido. A consulta vai direto ao banco com `AsNoTracking`. HybridCache com invalidação fica registrado como próximo passo no README.
+**Tratamento:** o cache inseguro foi removido. No lugar, o detalhe de produto usa o `HybridCache` do .NET, com expiração de 30 segundos e **invalidação depois do commit em toda escrita** que muda a resposta, inclusive a reserva e a devolução de estoque. A venda nunca lê do cache (ADR 0010).
 
 ### C3. Venda acima do estoque sob concorrência
 **Onde:** `PedidosController.Criar`.
@@ -99,7 +99,7 @@ Problemas encontrados em `legado_net6/`, com severidade, impacto em produção e
 ### A1. `async void` em endpoint e na confirmação
 **Onde:** `ProdutosController.Remover` e `PedidosController.EnviarEmailConfirmacao`.
 **Impacto:** o MVC não espera um `async void`, então responde antes de a operação terminar. Em `Remover`, se o `DbContext` for descartado no fim da requisição antes da exclusão, ela falha com `ObjectDisposedException`. É uma condição de corrida: na reprodução, com SQLite local, a exclusão terminou a tempo, mas com um banco em rede e sob carga nada garante isso. Exceção em `async void` não tem quem a observe e derruba o processo. A confirmação pode se perder sem registro.
-**Tratamento:** endpoints `async Task`. A confirmação vai para uma fila em memória (`Channel`) consumida por um `BackgroundService`.
+**Tratamento:** endpoints `async Task`. A confirmação usa um **outbox transacional**: é gravada na mesma transação do pedido e enviada por um `BackgroundService` que lê o banco com `FOR UPDATE SKIP LOCKED`, sem se perder num reinício e sem duplicar entre réplicas (ADR 0006).
 
 ### A2. Bloqueio síncrono com `.Result`
 **Onde:** `ProdutosController.Listar` e `FreteService.Calcular`.
@@ -225,10 +225,11 @@ Problemas encontrados em `legado_net6/`, com severidade, impacto em produção e
 
 ## Itens tratados só em parte
 
-Todos os problemas acima foram tratados. Em três deles a solução entregue resolve o defeito do legado, mas deixa uma limitação conhecida, registrada aqui e em "O que eu faria com mais tempo" no README:
+Todos os problemas acima foram tratados. Em dois deles a solução entregue resolve o defeito do legado, mas deixa uma limitação conhecida, registrada aqui e no README:
 
 | Item | O que foi feito | O que ficou de fora e por quê |
 | :--- | :--- | :--- |
-| **A1** (confirmação) | `async void` substituído por fila em memória + `BackgroundService`, sem dados pessoais no log | Confirmações ainda na fila se perdem se o processo reiniciar. A solução definitiva é um outbox transacional, que cabe numa entrega futura sem mudar o contrato da API |
-| **C2** (cache) | `BinaryFormatter` e cache inseguro removidos | Não há cache substituto. O HybridCache com invalidação no PUT e no DELETE fica como próximo passo, quando houver medição de carga que justifique |
+| **C2** (cache) | `BinaryFormatter` removido; `HybridCache` com invalidação em toda escrita | Sem cache distribuído, a invalidação vale para a réplica que fez a escrita; as outras podem mostrar o valor antigo por até 30 segundos. A venda não depende do cache |
 | **A3** (frete) | Cliente tipado, timeout de 2 s, falha vira 503 | Sem circuit breaker: com o serviço fora do ar, cada pedido ainda espera até 2 s antes do 503 |
+
+A limitação da primeira versão no **A1** (confirmações na fila em memória perdidas num reinício) foi resolvida com o outbox transacional.
