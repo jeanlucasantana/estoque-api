@@ -43,6 +43,8 @@ services:
       ConnectionStrings__Estoque: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
       Api__Chave: ${API_KEY}
       Frete__UrlBase: http://frete:8080
+      # Vazio por padrão: sem exportação de telemetria. Para usar o painel abaixo, veja "Observabilidade" no README.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     ports:
       - "8080:8080"
     depends_on:
@@ -51,6 +53,17 @@ services:
       frete:
         condition: service_started
     restart: unless-stopped
+
+  # Opcional (profile "observabilidade"): painel com traces, métricas e logs recebidos por OTLP.
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:13.5.2
+    profiles: ["observabilidade"]
+    environment:
+      # Só para uso local: o painel abre sem login.
+      ASPIRE_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"
+      DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"
+    ports:
+      - "18888:18888"
 
 volumes:
   postgres-dados:

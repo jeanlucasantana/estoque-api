@@ -1,6 +1,8 @@
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
+using Estoque.Api.Common;
 
 namespace Estoque.Api.Features.Pedidos;
 
@@ -15,7 +17,7 @@ public sealed class FreteOptions
 
 // Cliente tipado: o IHttpClientFactory reaproveita as conexões (sem esgotar portas, como o new HttpClient() do legado)
 // e renova os handlers periodicamente (sem ficar preso a um DNS antigo, como um HttpClient estático).
-public sealed class ServicoFrete(HttpClient http, ILogger<ServicoFrete> logger)
+public sealed class ServicoFrete(HttpClient http, MetricasDeEstoque metricas, ILogger<ServicoFrete> logger)
 {
     // RN05. Sem retry: uma nova tentativa estouraria o limite de espera.
     public static readonly TimeSpan TempoMaximoDeEspera = TimeSpan.FromSeconds(2);
@@ -30,6 +32,7 @@ public sealed class ServicoFrete(HttpClient http, ILogger<ServicoFrete> logger)
         // Ponto como separador decimal, qualquer que seja a cultura do servidor (o legado mandava "324,9" em pt-BR).
         var valor = valorPedido.ToString("0.00", CultureInfo.InvariantCulture);
         var rota = $"api/calcular?cep={Uri.EscapeDataString(cep)}&valor={valor}";
+        var inicio = Stopwatch.GetTimestamp();
 
         try
         {
@@ -37,14 +40,14 @@ public sealed class ServicoFrete(HttpClient http, ILogger<ServicoFrete> logger)
             if (!resposta.IsSuccessStatusCode)
             {
                 logger.LogWarning("Serviço de frete respondeu com status {StatusCode}", (int)resposta.StatusCode);
-                return null;
+                return Falhou("status_de_erro");
             }
 
             var corpo = await resposta.Content.ReadFromJsonAsync<RespostaFrete>(cancellationToken);
             if (corpo?.Valor is not { } frete || frete < 0 || frete > FreteMaximo)
             {
                 logger.LogWarning("Serviço de frete respondeu sem um valor válido");
-                return null;
+                return Falhou("resposta_invalida");
             }
 
             return frete;
@@ -53,13 +56,23 @@ public sealed class ServicoFrete(HttpClient http, ILogger<ServicoFrete> logger)
         {
             // Cancelamento sem o cliente ter desistido da requisição: foi o timeout do HttpClient.
             logger.LogWarning("Serviço de frete não respondeu em {TempoMaximo}", TempoMaximoDeEspera);
-            return null;
+            return Falhou("timeout");
         }
         catch (Exception erro) when (erro is HttpRequestException or JsonException or NotSupportedException)
         {
             logger.LogWarning(erro, "Falha ao consultar o serviço de frete");
-            return null;
+            return Falhou("erro_de_comunicacao");
         }
+        finally
+        {
+            metricas.DuracaoDoFrete(Stopwatch.GetElapsedTime(inicio));
+        }
+    }
+
+    private decimal? Falhou(string motivo)
+    {
+        metricas.FalhaDeFrete(motivo);
+        return null;
     }
 
     private sealed record RespostaFrete(decimal? Valor);

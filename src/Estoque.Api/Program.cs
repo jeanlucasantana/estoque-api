@@ -54,6 +54,9 @@ builder.Services.AddLimiteDeRequisicoes();
 // Cache do detalhe de produto. As opções de expiração e a invalidação ficam em CacheDeProdutos.
 builder.Services.AddHybridCache();
 
+// Traces, métricas e logs com OpenTelemetry; exporta por OTLP quando OTEL_EXPORTER_OTLP_ENDPOINT estiver configurado.
+builder.Services.AddTelemetria(builder.Configuration);
+
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<TratadorDeExcecoesInesperadas>();
 builder.Services.AddValidation();

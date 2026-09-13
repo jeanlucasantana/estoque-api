@@ -1,7 +1,9 @@
 using System.ComponentModel.DataAnnotations;
+using Estoque.Api.Common;
 using Estoque.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using OpenTelemetry;
 
 namespace Estoque.Api.Features.Pedidos;
 
@@ -53,6 +55,7 @@ public sealed class ProcessadorDeConfirmacoes(
     IServiceScopeFactory escopos,
     IOptions<ConfirmacoesOptions> options,
     TimeProvider relogio,
+    MetricasDeEstoque metricas,
     ILogger<ProcessadorDeConfirmacoes> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -90,6 +93,10 @@ public sealed class ProcessadorDeConfirmacoes(
     // Várias réplicas processam em paralelo sem enviar a mesma confirmação duas vezes.
     private async Task<int> ProcessarLoteAsync(int tamanhoDoLote, CancellationToken cancellationToken)
     {
+        // A busca roda a cada intervalo e quase sempre volta vazia: sem suprimir, cada busca viraria um trace.
+        // Só um lote com confirmações gera o span "confirmacoes.processar_lote", com os comandos do banco dentro.
+        using var semTelemetria = SuppressInstrumentationScope.Begin();
+
         await using var escopo = escopos.CreateAsyncScope();
         var db = escopo.ServiceProvider.GetRequiredService<AppDbContext>();
         var agora = relogio.GetUtcNow();
@@ -106,12 +113,22 @@ public sealed class ProcessadorDeConfirmacoes(
                 """)
             .ToListAsync(cancellationToken);
 
+        if (lote.Count == 0)
+        {
+            return 0;
+        }
+
+        using var comTelemetria = SuppressInstrumentationScope.Begin(false);
+        using var atividade = Telemetria.Atividades.StartActivity("confirmacoes.processar_lote");
+        atividade?.SetTag("confirmacoes.quantidade", lote.Count);
+
         foreach (var confirmacao in lote)
         {
             try
             {
                 Enviar(confirmacao);
                 confirmacao.MarcarComoEnviada(relogio.GetUtcNow());
+                metricas.ConfirmacaoEnviada();
             }
             catch (Exception erro) when (erro is not OperationCanceledException)
             {

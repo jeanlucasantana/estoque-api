@@ -72,6 +72,7 @@ public static class PedidosEndpoints
         ServicoFrete servicoFrete,
         TimeProvider relogio,
         HybridCache cache,
+        MetricasDeEstoque metricas,
         HttpResponse resposta,
         ILogger<Pedido> logger,
         CancellationToken cancellationToken)
@@ -142,6 +143,7 @@ public static class PedidosEndpoints
             {
                 // Sai sem commit: o descarte da transação desfaz as reservas que já tinham dado certo (RN03, tudo ou nada).
                 logger.LogInformation("Pedido recusado por estoque insuficiente nos produtos {ProdutoIds}", semEstoque);
+                metricas.PedidoRecusadoPorEstoque();
                 return TypedResults.Problem(
                     statusCode: StatusCodes.Status409Conflict,
                     title: "Estoque insuficiente.",
@@ -181,6 +183,7 @@ public static class PedidosEndpoints
 
         // Depois do commit: a quantidade em estoque mostrada no detalhe dos produtos mudou.
         await CacheDeProdutos.InvalidarAsync(cache, ids, cancellationToken);
+        metricas.PedidoCriado();
 
         logger.LogInformation("Pedido {PedidoId} criado com {QuantidadeItens} itens e total {Total}", pedido.Id, itens.Count, pedido.Total);
         return TypedResults.Created($"/api/pedidos/{pedido.Id}", PedidoResponse.De(pedido));
