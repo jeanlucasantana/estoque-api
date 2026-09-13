@@ -52,6 +52,7 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("ConnectionStrings:Estoque", _postgres.GetConnectionString());
         builder.UseSetting("Api:Chave", ChaveApi);
         builder.UseSetting("Frete:UrlBase", "http://frete.teste");
+        builder.UseSetting("Confirmacoes:IntervaloSegundos", "1");
 
         builder.ConfigureTestServices(services =>
         {

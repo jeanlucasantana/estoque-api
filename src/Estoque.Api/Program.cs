@@ -42,8 +42,12 @@ builder.Services.AddHttpClient<ServicoFrete>((servicos, http) =>
 });
 
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddSingleton<FilaDeConfirmacoes>();
-builder.Services.AddHostedService<ServicoDeConfirmacao>();
+
+builder.Services.AddOptions<ConfirmacoesOptions>()
+    .BindConfiguration(ConfirmacoesOptions.Secao)
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddHostedService<ProcessadorDeConfirmacoes>();
 
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<TratadorDeExcecoesInesperadas>();

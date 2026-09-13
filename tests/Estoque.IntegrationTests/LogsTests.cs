@@ -78,7 +78,7 @@ public sealed class LogsTests(ApiFactory api)
         while (confirmacao is null && cronometro.Elapsed < TimeSpan.FromSeconds(10))
         {
             confirmacao = coletor.GetSnapshot().FirstOrDefault(registro =>
-                registro.Category == typeof(ServicoDeConfirmacao).FullName
+                registro.Category == typeof(ProcessadorDeConfirmacoes).FullName
                 && registro.StructuredState?.Any(par => par.Key == "PedidoId" && par.Value == id) == true);
 
             if (confirmacao is null)

@@ -1,4 +1,5 @@
 using Estoque.Api.Domain;
+using Estoque.Api.Features.Pedidos;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -14,11 +15,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 
     public DbSet<Pedido> Pedidos => Set<Pedido>();
 
+    public DbSet<ConfirmacaoPendente> ConfirmacoesPendentes => Set<ConfirmacaoPendente>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigurarProduto(modelBuilder.Entity<Produto>());
         ConfigurarPedido(modelBuilder.Entity<Pedido>());
         ConfigurarItemPedido(modelBuilder.Entity<ItemPedido>());
+        ConfigurarConfirmacaoPendente(modelBuilder.Entity<ConfirmacaoPendente>());
     }
 
     private static void ConfigurarProduto(EntityTypeBuilder<Produto> produto)
@@ -74,5 +78,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 
         // Produto nunca é apagado fisicamente (RN01); o Restrict protege o histórico dos pedidos.
         item.HasOne<Produto>().WithMany().HasForeignKey(i => i.ProdutoId).OnDelete(DeleteBehavior.Restrict);
+    }
+
+    private static void ConfigurarConfirmacaoPendente(EntityTypeBuilder<ConfirmacaoPendente> confirmacao)
+    {
+        confirmacao.ToTable("confirmacoes_pendentes");
+        confirmacao.HasOne<Pedido>().WithMany().HasForeignKey(c => c.PedidoId).OnDelete(DeleteBehavior.Cascade);
+
+        // Índice parcial: o processador só procura as não enviadas, e as enviadas acumulam com o tempo.
+        confirmacao.HasIndex(c => c.ProximaTentativaEm).HasFilter("enviada_em IS NULL");
     }
 }

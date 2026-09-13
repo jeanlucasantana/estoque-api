@@ -64,7 +64,6 @@ public static class PedidosEndpoints
         AppDbContext db,
         ServicoFrete servicoFrete,
         TimeProvider relogio,
-        FilaDeConfirmacoes confirmacoes,
         ILogger<Pedido> logger,
         CancellationToken cancellationToken)
     {
@@ -132,11 +131,13 @@ public static class PedidosEndpoints
 
             db.Pedidos.Add(pedido);
             await db.SaveChangesAsync(cancellationToken);
+
+            // RN08 com outbox: a confirmação pendente entra na mesma transação do pedido. Ou os dois são gravados, ou nenhum.
+            db.ConfirmacoesPendentes.Add(new ConfirmacaoPendente(pedido.Id, agora));
+            await db.SaveChangesAsync(cancellationToken);
+
             await transacao.CommitAsync(cancellationToken);
         }
-
-        // RN08: enfileira depois do commit, para nunca confirmar um pedido que não foi gravado.
-        confirmacoes.Enfileirar(pedido.Id);
 
         logger.LogInformation("Pedido {PedidoId} criado com {QuantidadeItens} itens e total {Total}", pedido.Id, itens.Count, pedido.Total);
         return TypedResults.Created($"/api/pedidos/{pedido.Id}", PedidoResponse.De(pedido));
