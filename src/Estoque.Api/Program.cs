@@ -1,14 +1,55 @@
+using System.Text.Json.Serialization;
+using Estoque.Api.Common;
 using Estoque.Api.Data;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDbContext<AppDbContext>(options => options
-    .UseNpgsql(builder.Configuration.GetConnectionString("Estoque"))
+// Configuração obrigatória: a aplicação não sobe se faltar algo ou se algum valor for inválido.
+builder.Services.AddOptions<ApiOptions>()
+    .BindConfiguration(ApiOptions.Secao)
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+builder.Services.AddOptions<BancoDeDadosOptions>()
+    .Configure<IConfiguration>((opcoes, configuracao) =>
+        opcoes.ConnectionString = configuracao.GetConnectionString("Estoque") ?? string.Empty)
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+// A connection string vem das Options quando o DbContext é criado, não na montagem do builder.
+builder.Services.AddDbContext<AppDbContext>((servicos, options) => options
+    .UseNpgsql(servicos.GetRequiredService<IOptions<BancoDeDadosOptions>>().Value.ConnectionString)
     .UseSnakeCaseNamingConvention());
+
+builder.Services.AddSingleton(TimeProvider.System);
+
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<TratadorDeExcecoesInesperadas>();
+builder.Services.AddValidation();
+builder.Services.ConfigureHttpJsonOptions(opcoes =>
+    opcoes.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+builder.Services.AddOpenApi();
+
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<AppDbContext>(tags: ["banco"]);
 
 var app = builder.Build();
 
-app.MapGet("/", () => "Hello World!");
+app.UseExceptionHandler();
+app.UseStatusCodePages();
+app.UseMiddleware<ChaveApiMiddleware>();
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
+
+// live: só confirma que o processo responde. ready: confirma também que o banco está acessível.
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("banco") });
 
 app.Run();
