@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Estoque.Api.Common;
 using Estoque.Api.Data;
 using Estoque.Api.Domain;
@@ -21,11 +22,13 @@ public static class PedidosEndpoints
     }
 
     private static async Task<Ok<ResultadoPaginado<PedidoResumoResponse>>> Listar(
-        [AsParameters] ParametrosPaginacao paginacao,
+        [Range(1, ParametrosPaginacao.PaginaMaxima, ErrorMessage = ParametrosPaginacao.MensagemPagina)] int? pagina,
+        [Range(1, ParametrosPaginacao.TamanhoMaximo, ErrorMessage = ParametrosPaginacao.MensagemTamanho)] int? tamanhoPagina,
         StatusPedido? status,
         AppDbContext db,
         CancellationToken cancellationToken)
     {
+        var paginacao = ParametrosPaginacao.De(pagina, tamanhoPagina);
         var consulta = db.Pedidos.AsQueryable();
         if (status is not null)
         {

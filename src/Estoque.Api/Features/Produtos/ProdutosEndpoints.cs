@@ -24,20 +24,24 @@ public static class ProdutosEndpoints
 
     // A listagem padrão mostra só produtos ativos (RN01).
     private static async Task<Ok<ResultadoPaginado<ProdutoResponse>>> Listar(
-        [AsParameters] ParametrosPaginacao paginacao,
+        [Range(1, ParametrosPaginacao.PaginaMaxima, ErrorMessage = ParametrosPaginacao.MensagemPagina)] int? pagina,
+        [Range(1, ParametrosPaginacao.TamanhoMaximo, ErrorMessage = ParametrosPaginacao.MensagemTamanho)] int? tamanhoPagina,
         AppDbContext db,
         CancellationToken cancellationToken)
     {
         var consulta = db.Produtos.Where(p => p.Ativo).OrderBy(p => p.Id);
-        return TypedResults.Ok(await PaginarAsync(consulta, paginacao, cancellationToken));
+        return TypedResults.Ok(await PaginarAsync(consulta, ParametrosPaginacao.De(pagina, tamanhoPagina), cancellationToken));
     }
 
     private static async Task<Ok<ResultadoPaginado<ProdutoResponse>>> Buscar(
         [Required, MaxLength(120)] string nome,
-        [AsParameters] ParametrosPaginacao paginacao,
+        [Range(1, ParametrosPaginacao.PaginaMaxima, ErrorMessage = ParametrosPaginacao.MensagemPagina)] int? pagina,
+        [Range(1, ParametrosPaginacao.TamanhoMaximo, ErrorMessage = ParametrosPaginacao.MensagemTamanho)] int? tamanhoPagina,
         AppDbContext db,
         CancellationToken cancellationToken)
     {
+        var paginacao = ParametrosPaginacao.De(pagina, tamanhoPagina);
+
         // ILIKE parametrizado: o termo vai como parâmetro e nunca vira SQL (o legado interpolava e sofria injeção).
         // Os curingas % e _ digitados são escapados para serem procurados como texto literal.
         var padrao = $"%{EscaparCuringas(nome)}%";
