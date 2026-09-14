@@ -10,7 +10,10 @@ services:
     volumes:
       - postgres-dados:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      # -h 127.0.0.1: testa pela rede, como a API e o bundle conectam. Na primeira subida, o entrypoint cria o banco num
+      # servidor temporário que só escuta no socket local e depois o reinicia; testando pelo socket, o health check passava
+      # nessa fase e a migração recebia "Connection refused".
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
       retries: 12
