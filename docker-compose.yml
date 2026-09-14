@@ -25,7 +25,9 @@ services:
     build:
       context: .
       target: migrations
-    command: ["--connection", "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"]
+    # "Gss Encryption Mode=Disable" (aqui e na API): a imagem chiseled não tem a biblioteca do Kerberos. Sem a opção,
+    # o Npgsql tenta carregá-la na primeira conexão e escreve um erro falso no log antes de autenticar com senha.
+    command: ["--connection", "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Gss Encryption Mode=Disable"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -44,7 +46,7 @@ services:
     environment:
       # Production por padrão. Com ASPNETCORE_ENVIRONMENT=Development, o documento OpenAPI fica em /openapi/v1.json.
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
-      ConnectionStrings__Estoque: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      ConnectionStrings__Estoque: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Gss Encryption Mode=Disable"
       Api__Chave: ${API_KEY}
       Frete__UrlBase: http://frete:8080
       # Vazio por padrão: sem exportação de telemetria. Para usar o painel abaixo, veja "Observabilidade" no README.
